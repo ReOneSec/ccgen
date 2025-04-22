@@ -1,9 +1,9 @@
 import logging
 import random
 import requests
+from datetime import datetime, timedelta
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
-from datetime import datetime, timedelta
 
 # Set up logging
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -45,13 +45,38 @@ def generate_card(bin_number=None, month=None, year=None, cvv=None):
 def validate_card(card_data):
     """Validate the card using the specified API."""
     url = "https://api.chkr.cc/"
+    
+    # Based on the API example, it appears to expect form data
+    payload = {
+        "data": card_data,
+        "charge": False  # Include this parameter as shown in the example
+    }
+    
+    # Log the request for debugging
+    logging.info(f"Sending request to API with payload: {payload}")
+    
     try:
-        response = requests.post(url, json={"data": card_data})
+        # Try with form data first (as shown in the API example)
+        response = requests.post(url, data=payload)
+        
+        # Log the response for debugging
+        logging.info(f"API Response status: {response.status_code}")
+        logging.info(f"API Response content: {response.text}")
+        
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
         logging.error(f"API request failed: {e}")
-        return None
+        
+        # If form data fails, try with JSON as a fallback
+        try:
+            logging.info("Trying with JSON payload instead")
+            response = requests.post(url, json=payload)
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e2:
+            logging.error(f"JSON API request also failed: {e2}")
+            return None
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Start command handler."""
@@ -106,6 +131,29 @@ async def chk(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text('Please provide a card in the format: `CardNumber|mm|yyyy|CVV`')
         return
     
+    # Validate card data
+    try:
+        card_number, month, year, cvv = card_data.split('|')
+        
+        if not card_number.isdigit() or len(card_number) < 15 or len(card_number) > 16:
+            await update.message.reply_text('Invalid card number format. Must be digits only and 15-16 characters long.')
+            return
+        
+        if not month.isdigit() or not 1 <= int(month) <= 12:
+            await update.message.reply_text('Invalid month format. Must be a number between 01 and 12.')
+            return
+        
+        if not year.isdigit() or int(year) < datetime.now().year:
+            await update.message.reply_text('Invalid year format. Must be a 4-digit future year.')
+            return
+        
+        if not cvv.isdigit() or not 3 <= len(cvv) <= 4:
+            await update.message.reply_text('Invalid CVV format. Must be digits only and 3 or 4 characters long.')
+            return
+    except ValueError:
+        await update.message.reply_text('Invalid format. Please use: CardNumber|mm|yyyy|CVV')
+        return
+    
     # Process the validation
     validation_response = validate_card(card_data)
 
@@ -130,7 +178,6 @@ async def chk(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         f"Currency: {validation_response['card']['country']['currency']}\n"
     )
     await update.message.reply_text(message)
-    
 
 async def feedback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Collect user feedback."""
