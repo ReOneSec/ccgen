@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
 # Your Telegram bot token
-TOKEN = 'YOUR_TELEGRAM_BOT_TOKEN'
+TOKEN = '8128501037:AAHGil80gIhstmUuxBhE9O9rad0Xjk1QPNE'
 
 # Rate limiting settings
 rate_limit = {}
