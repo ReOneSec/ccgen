@@ -1,8 +1,8 @@
 import logging
 import random
 import requests
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Updater, CommandHandler, CallbackContext, MessageHandler, filters
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
 from datetime import datetime, timedelta
 
 # Set up logging
@@ -53,9 +53,9 @@ def validate_card(card_data):
         logging.error(f"API request failed: {e}")
         return None
 
-def start(update: Update, context: CallbackContext) -> None:
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Start command handler."""
-    update.message.reply_text(
+    await update.message.reply_text(
         'Welcome! Use the following commands:\n'
         '/gen [BIN] - Generate 10 random card numbers (optionally with a specific BIN).\n'
         '/gen [BIN]|[mm]|[yyyy] - Generate cards with a specific expiry date.\n'
@@ -65,16 +65,16 @@ def start(update: Update, context: CallbackContext) -> None:
         '/help - Show this help message.'
     )
 
-def gen(update: Update, context: CallbackContext) -> None:
+async def gen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Generate cards based on user input and send them in monospace format."""
     user_id = update.message.from_user.id
     
     if is_rate_limited(user_id):
-        update.message.reply_text('You are being rate limited. Please wait a minute before trying again.')
+        await update.message.reply_text('You are being rate limited. Please wait a minute before trying again.')
         return
 
     if len(context.args) == 0:
-        update.message.reply_text('Please provide a BIN or card details in the format: `<BIN>` or `<BIN>|<mm>|<yyyy>` or `<BIN>|<mm>|<yyyy>|<CVV>`')
+        await update.message.reply_text('Please provide a BIN or card details in the format: `<BIN>` or `<BIN>|<mm>|<yyyy>` or `<BIN>|<mm>|<yyyy>|<CVV>`')
         return
     
     user_input = context.args[0].split('|')
@@ -87,22 +87,22 @@ def gen(update: Update, context: CallbackContext) -> None:
     cards = [generate_card(bin_number, month, year, cvv) for _ in range(10)]
     cards_message = "\n".join(f"`{card}`" for card in cards)
 
-    update.message.reply_text(
+    await update.message.reply_text(
         f"Generated Cards:\n```\n{cards_message}\n```", 
         parse_mode='MarkdownV2'
     )
 
-def chk(update: Update, context: CallbackContext) -> None:
+async def chk(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Check the card provided by the user."""
     if len(context.args) < 4:
-        update.message.reply_text('Please provide a card in the format: `CardNumber|mm|yyyy|CVV`')
+        await update.message.reply_text('Please provide a card in the format: `CardNumber|mm|yyyy|CVV`')
         return
     
     card_data = "|".join(context.args)
     validation_response = validate_card(card_data)
 
     if validation_response is None:
-        update.message.reply_text('Error: Unable to validate card at this time. Please try again later.')
+        await update.message.reply_text('Error: Unable to validate card at this time. Please try again later.')
         return
 
     if validation_response['code'] == 1:
@@ -121,20 +121,20 @@ def chk(update: Update, context: CallbackContext) -> None:
         f"Country: {validation_response['card']['country']['name']} ({validation_response['card']['country']['code']})\n"
         f"Currency: {validation_response['card']['country']['currency']}\n"
     )
-    update.message.reply_text(message)
+    await update.message.reply_text(message)
 
-def feedback(update: Update, context: CallbackContext) -> None:
+async def feedback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Collect user feedback."""
     feedback_text = ' '.join(context.args)
     if feedback_text:
         logging.info(f"Feedback from user {update.message.from_user.id}: {feedback_text}")
-        update.message.reply_text("Thank you for your feedback!")
+        await update.message.reply_text("Thank you for your feedback!")
     else:
-        update.message.reply_text("Please provide feedback after the /feedback command.")
+        await update.message.reply_text("Please provide feedback after the /feedback command.")
 
-def help_command(update: Update, context: CallbackContext) -> None:
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Help command handler."""
-    update.message.reply_text(
+    await update.message.reply_text(
         'This bot helps you generate and validate credit/debit cards.\n\n'
         'Commands:\n'
         '/gen <BIN> - Generates 10 random card numbers for the specified BIN.\n'
@@ -147,22 +147,19 @@ def help_command(update: Update, context: CallbackContext) -> None:
 
 def main() -> None:
     """Run the bot."""
-    updater = Updater(TOKEN)
-
-    dispatcher = updater.dispatcher
+    application = ApplicationBuilder().token(TOKEN).build()
 
     # Register command handlers
-    dispatcher.add_handler(CommandHandler("start", start))
-    dispatcher.add_handler(CommandHandler("help", help_command))
-    dispatcher.add_handler(CommandHandler("gen", gen))
-    dispatcher.add_handler(CommandHandler("chk", chk))
-    dispatcher.add_handler(CommandHandler("feedback", feedback))
-    dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, lambda update, context: update.message.reply_text('Please use commands /gen to generate cards or /chk <CardNumber|mm|yyyy|CVV> to check a card. For assistance, type /help.')))
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("gen", gen))
+    application.add_handler(CommandHandler("chk", chk))
+    application.add_handler(CommandHandler("feedback", feedback))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, lambda update, context: update.message.reply_text('Please use commands /gen to generate cards or /chk <CardNumber|mm|yyyy|CVV> to check a card. For assistance, type /help.')))
 
     # Start the bot
-    updater.start_polling()
-    updater.idle()
+    application.run_polling()
 
 if __name__ == '__main__':
     main()
-  
+    
