@@ -94,11 +94,19 @@ async def gen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def chk(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Check the card provided by the user."""
-    if len(context.args) < 4:
+    if not context.args:
         await update.message.reply_text('Please provide a card in the format: `CardNumber|mm|yyyy|CVV`')
         return
     
-    card_data = "|".join(context.args)
+    # Get the entire input as a single string
+    card_data = context.args[0]
+    
+    # Check if it contains the pipe separators
+    if card_data.count('|') != 3:
+        await update.message.reply_text('Please provide a card in the format: `CardNumber|mm|yyyy|CVV`')
+        return
+    
+    # Process the validation
     validation_response = validate_card(card_data)
 
     if validation_response is None:
@@ -122,6 +130,7 @@ async def chk(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         f"Currency: {validation_response['card']['country']['currency']}\n"
     )
     await update.message.reply_text(message)
+    
 
 async def feedback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Collect user feedback."""
